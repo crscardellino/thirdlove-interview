@@ -13,6 +13,6 @@ pipelines:
         script: # Modify the commands below to build your repository.
           - pip install -r requirements.txt
           - pytest
-          - docker build -t crscardellino/thirdlove:latest
+          - docker build -t crscardellino/thirdlove:latest .
 options:
   docker: true
