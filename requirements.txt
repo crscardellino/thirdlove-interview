@@ -3,5 +3,6 @@ Flask-JWT-Extended==3.16.0
 Flask-RESTful==0.3.7
 numpy==1.16.0
 passlib==1.7.1
+pytest==4.1.1
 scikit-learn==0.20.2
 scipy==1.2.0
