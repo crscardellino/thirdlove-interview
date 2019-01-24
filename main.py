@@ -5,7 +5,7 @@ from __future__ import absolute_import, unicode_literals
 
 import argparse
 
-from app import app
+from flask_app.app import app
 
 
 if __name__ == "__main__":
