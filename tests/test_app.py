@@ -7,5 +7,6 @@ import pytest
 
 def test_index(client):
     response = client.get("/")
-    json_data = response.get_json()
-    assert "message" in json_data
+
+    assert response.status_code == 200
+    assert "message" in response.get_json()
