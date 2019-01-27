@@ -3,6 +3,7 @@
 from __future__ import absolute_import, unicode_literals
 
 import os
+import numpy as np
 
 from flask import Flask, jsonify, request
 from logging.config import dictConfig
@@ -11,7 +12,6 @@ from sklearn.externals import joblib
 
 class ModelNotFoundError(Exception):
     pass
-
 
 
 def create_app(test_config=None, dummy_test_model=None):
@@ -67,5 +67,20 @@ def create_app(test_config=None, dummy_test_model=None):
     @app.route("/")
     def index():
         return jsonify({"message": "Hello, World!"})
+
+    @app.route("/api/recommend", defaults={"max_recs": 10}, methods=["POST"])
+    @app.route("/api/recommend/<max_recs>", methods=["POST"])
+    def recommend(max_recs):
+        if app.config['TESTING']:
+            return jsonify({"recommendations": []})
+
+        data = request.get_json()
+        movies = [f.split("=", 1)[1] for f in model.steps[0][1].feature_names_
+                  if f.startswith("movie")]
+        X = [{**data, **{"movie": movie}} for movie in movies]
+        recommendations = model.predict(X)  # Predicts over the whole movie dataset
+        recommendations = np.argsort(recommendations)[::-1][:max_recs]
+
+        return jsonify({"recommendations": [movies[i] for i in recommendations]})
 
     return app
