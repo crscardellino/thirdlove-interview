@@ -118,9 +118,6 @@ def create_app(test_config=None, dummy_test_model=None):
     @app.route("/api/recommend", defaults={"max_recs": 10}, methods=["POST"])
     @app.route("/api/recommend/<max_recs>", methods=["POST"])
     def recommend(max_recs):
-        if app.config['TESTING']:
-            return jsonify({"recommendations": []})
-
         data = check_parameters(request.get_json())
         movies = [f.split("=", 1)[1] for f in model.steps[0][1].feature_names_
                   if f.startswith("movie")]

@@ -15,7 +15,7 @@ def get_dummy_test_model():
     Returns a dummy model pipeline with the solely purpose of using it for tests.
     """
     model = make_pipeline(DictVectorizer(), LinearRegression())
-    model.fit([{"test": 0}], [0])
+    model.fit([{"age": 1, "gender": "O", "occupation": "None", "movie": "Test"}], [0])
 
     return model
 
