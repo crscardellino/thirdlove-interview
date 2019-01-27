@@ -7,6 +7,7 @@ import argparse
 
 from flask_app.app import create_app
 
+app = create_app()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run main API Flask server")
@@ -21,6 +22,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    app = create_app()
     app.run(host="0.0.0.0", debug=args.debug, port=args.port)
-
