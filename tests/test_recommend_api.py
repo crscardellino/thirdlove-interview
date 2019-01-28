@@ -120,6 +120,21 @@ def test_recommend_occupation_2(client, authentication_headers):
     assert "following" in response_message
 
 
+def test_recommend_max_recs(client, authentication_headers):
+    """ Tests error on recommend request when 'max_recs' is not integer """
+    request_data = {"age": 1, "gender": "O", "occupation": "none", "max_recs": "none"}
+    response = client.post("/api/recommend", json=request_data, headers=authentication_headers)
+
+    response_data = response.get_json()
+    assert response.status_code == 400
+    assert "message" in response_data
+
+    response_message = response_data["message"].lower()
+    assert "parameter" in response_message
+    assert "max_recs" in response_message
+    assert "integer" in response_message
+
+
 def test_recommend_invalid_param(client, authentication_headers):
     """ Tests error on recommend request with invalid parameter """
     request_data = {"age": 1, "gender": "O", "occupation": "none", "extra": 0}

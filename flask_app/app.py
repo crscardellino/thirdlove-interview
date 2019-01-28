@@ -122,10 +122,9 @@ def create_app(test_config=None, dummy_test_model=None):
         """
         return jsonify({"message": "Protected"})
 
-    @app.route("/api/recommend", defaults={"max_recs": 10}, methods=["POST"])
-    @app.route("/api/recommend/<max_recs>", methods=["POST"])
+    @app.route("/api/recommend", methods=["POST"])
     @jwt_required
-    def recommend(max_recs):
+    def recommend():
         # Check the parameters are alright
         data = check_recommend_data_parameters(request)
 
@@ -134,6 +133,7 @@ def create_app(test_config=None, dummy_test_model=None):
                   if f.startswith("movie")]
 
         # Generate a dataset with each movie
+        max_recs = data.pop("max_recs", 10)
         X = [{**data, **{"movie": movie}} for movie in movies]
 
         # Predicts over the whole movie dataset and get the top recommendations

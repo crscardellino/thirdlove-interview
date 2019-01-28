@@ -70,7 +70,9 @@ def check_recommend_data_parameters(request):
     elif data["occupation"] not in valid_occupations:
         raise InvalidUsage("The parameter 'occupation' must be one of the following: %s" %
                            ", ".join("'%s'" % o for o in sorted(valid_occupations)))
-    elif not set(data.keys()).issubset({"age", "gender", "occupation"}):
-        raise InvalidUsage("The only valid parameters are: 'age', 'gender', and 'occupation'")
+    elif not isinstance(data.get("max_recs", 0), int):
+        raise InvalidUsage("The parameter 'max_recs' must be an integer.")
+    elif not set(data.keys()).issubset({"age", "gender", "occupation", "max_recs"}):
+        raise InvalidUsage("The only valid parameters are: 'age', 'gender', 'occupation', and 'max_recs'")
 
     return data
