@@ -2,63 +2,18 @@
 
 from __future__ import absolute_import, unicode_literals
 
+import datetime
 import os
 import numpy as np
 
 from flask import Flask, jsonify, request
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required
 from logging.config import dictConfig
+from passlib.hash import pbkdf2_sha256 as sha256
 from sklearn.externals import joblib
 
-
-class ModelNotFoundError(Exception):
-    pass
-
-
-class InvalidUsage(Exception):
-    status_code = 400
-
-    def __init__(self, message, status_code=None, payload=None):
-        Exception.__init__(self)
-        self.message = message
-        if status_code is not None:
-            self.status_code = status_code
-        self.payload = payload
-
-    def to_dict(self):
-        rv = dict(self.payload or ())
-        rv['message'] = self.message
-        return rv
-
-
-def check_parameters(data):
-    """
-    Checks the parameters sent are correct. Raise InvalidUsage if not.
-    :param data: JSON dictionary with parameters to run the recommendations.
-    """
-    valid_genders = {"M", "F", "O"}
-    valid_occupations = {"administrator", "artist", "doctor", "educator",
-                         "engineer", "entertainment", "executive", "healthcare",
-                         "homemaker", "lawyer", "librarian", "marketing", "none",
-                         "other", "programmer", "retired", "salesman",
-                         "scientist", "student", "technician", "writer"}
-
-    if "age" not in data.keys():
-        raise InvalidUsage("Missing parameter: 'age'")
-    elif not isinstance(data["age"], int):
-        raise InvalidUsage("The parameter 'age' must be an integer")
-    elif "gender" not in data.keys():
-        raise InvalidUsage("Missing parameter: 'gender'")
-    elif data['gender'] not in valid_genders:
-        raise InvalidUsage("The parameter 'gender' must be one of the following: 'M', 'F', 'O'")
-    elif "occupation" not in data.keys():
-        raise InvalidUsage("Missing parameter: 'occupation'")
-    elif data["occupation"] not in valid_occupations:
-        raise InvalidUsage("The parameter 'occupation' must be one of the following: %s" %
-                           ", ".join("'%s'" % o for o in sorted(valid_occupations)))
-    elif not set(data.keys()).issubset({"age", "gender", "occupation"}):
-        raise InvalidUsage("The only valid parameters are: 'age', 'gender', and 'occupation'")
-
-    return data
+from flask_app.utils import InvalidConfigurationError, InvalidUsage,\
+    check_recommend_data_parameters, check_login_parameters
 
 
 def create_app(test_config=None, dummy_test_model=None):
@@ -72,38 +27,69 @@ def create_app(test_config=None, dummy_test_model=None):
     # Define the logging configuration
 
     dictConfig({
-        'version': 1,
-        'formatters': {'default': {
-            'format': '[%(asctime)s] %(levelname)s in %(module)s: %(message)s',
+        "version": 1,
+        "formatters": {"default": {
+            "format": "[%(asctime)s] %(levelname)s in %(module)s: %(message)s",
         }},
-        'handlers': {'wsgi': {
-            'class': 'logging.StreamHandler',
-            'stream': 'ext://flask.logging.wsgi_errors_stream',
-            'formatter': 'default'
+        "handlers": {"wsgi": {
+            "class": "logging.StreamHandler",
+            "stream": "ext://flask.logging.wsgi_errors_stream",
+            "formatter": "default"
         }},
-        'root': {
-            'level': 'INFO',
-            'handlers': ['wsgi']
+        "root": {
+            "level": "INFO",
+            "handlers": ["wsgi"]
         }
     })
 
     app = Flask(__name__)
 
     if test_config is None:
+        app.logger.info("Setting the configuration")
+        # Get secret key from environment, otherwise generate one
+        if os.environ.get("SECRET_KEY", None) is None:
+            app.logger.warn("The SECRET_KEY environment variable is not set. Setting it to random.")
+        app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", os.urandom(16))
+
+        if os.environ.get("SECRET_KEY", None) is None:
+            app.logger.warn("The JWT_SECRET_KEY environment variable is not set. Setting it to SECRET_KEY.")
+        app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY", app.config["SECRET_KEY"])
+
+        # Get the default session expiration time (or set up otherwise)
+        if os.environ.get("SESSION_EXPIRATION", None) is None:
+            app.logger.warn("The SESSION_EXPIRATION environment variable is not set. Setting it to 24 hours.")
+            app.config["JWT_ACCESS_TOKEN_EXPIRES"] = datetime.timedelta(hours=24)
+        else:
+            try:
+                session_expiration = os.environ["SESSION_EXPIRATION"]
+                app.config["JWT_ACCESS_TOKEN_EXPIRES"] = datetime.timedelta(hours=int(session_expiration))
+            except ValueError:
+                app.logger.warn("The SESSION_EXPIRATION environment variable is not a valid integer. " +
+                                "Setting it to 24 hours.")
+                app.config["JWT_ACCESS_TOKEN_EXPIRES"] = datetime.timedelta(hours=24)
+
         # Load the model given by the environment variable
         app.logger.info("Getting the machine learning model from the ML_MODEL_PATH " +
                         "environment variable.")
-
         model_path = os.environ.get("ML_MODEL_PATH", None)
         if model_path is None:
-            raise ModelNotFoundError("The environment variable \"ML_MODEL_PATH\" " +
-                                     "doesn't exist. Please declare it before " +
-                                     "starting this application.")
-
-        # TODO: This should check whether the path is a file or a URL
-        app.logger.info("Loading model from path %s" % model_path)  
+            raise InvalidConfigurationError("The environment variable " +
+                                            "\"ML_MODEL_PATH\" doesn't exist. " +
+                                            "Please declare it before starting " +
+                                            "this application.")
+        app.logger.info("Loading model from path %s" % model_path)
         model = joblib.load(model_path)
         app.logger.info("Model successfully loaded")
+
+        # Get password from environment or return error
+        session_password = os.environ.get("SESSION_PASSWORD", None)
+        if session_password is None:
+            raise InvalidConfigurationError("The environment variable " +
+                                            "\"SESSION_PASSWORD\" doesn't exist. " +
+                                            "Please declare it before starting " +
+                                            "this application.")
+        else:
+            app.config["SESSION_PASSWORD"] = sha256.hash(session_password)
     else:
         # In case the app is being tested, update the configuration accordingly
         # And use the dummy test model
@@ -111,18 +97,47 @@ def create_app(test_config=None, dummy_test_model=None):
         app.config.update(test_config)
         model = dummy_test_model
 
+    jwt = JWTManager(app)
+
     @app.route("/")
     def index():
+        """
+        View to test working server
+        """
         return jsonify({"message": "Hello, World!"})
+
+    @app.route("/api/login", methods=["POST"])
+    def login():
+        data = check_login_parameters(request)
+        if not sha256.verify(data["session_password"], app.config["SESSION_PASSWORD"]):
+            raise InvalidUsage("Incorrect session password", status_code=401)
+        access_token = create_access_token("session_password")
+        return jsonify({"access_token": access_token})
+
+    @app.route("/api/protected", methods=["GET"])
+    @jwt_required
+    def protected():
+        """
+        View to test session authentication
+        """
+        return jsonify({"message": "Protected"})
 
     @app.route("/api/recommend", defaults={"max_recs": 10}, methods=["POST"])
     @app.route("/api/recommend/<max_recs>", methods=["POST"])
+    @jwt_required
     def recommend(max_recs):
-        data = check_parameters(request.get_json())
+        # Check the parameters are alright
+        data = check_recommend_data_parameters(request)
+
+        # Get all the movies of the model (this depends on the model)
         movies = [f.split("=", 1)[1] for f in model.steps[0][1].feature_names_
                   if f.startswith("movie")]
+
+        # Generate a dataset with each movie
         X = [{**data, **{"movie": movie}} for movie in movies]
-        recommendations = model.predict(X)  # Predicts over the whole movie dataset
+
+        # Predicts over the whole movie dataset and get the top recommendations
+        recommendations = model.predict(X)
         recommendations = np.argsort(recommendations)[::-1][:max_recs]
 
         return jsonify({"recommendations": [movies[i] for i in recommendations]})
