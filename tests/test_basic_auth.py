@@ -2,6 +2,8 @@
 
 from __future__ import absolute_import, unicode_literals
 
+import jwt
+
 from time import sleep
 
 from tests.utils import get_test_client
@@ -47,16 +49,8 @@ def test_missing_header(client):
 
 def test_unauthorized(client):
     """ Test unauthorized requests are errors """
-    # First get a valid token that will be modified
-    request_data = {"session_password": "test-password"}
-    response = client.post("/api/login", json=request_data)
-
-    response_data = response.get_json()
-    assert response.status_code == 200
-    assert "access_token" in response_data
-
-    # Modify the access_token
-    access_token = response_data["access_token"][:-1] + "1"
+    access_token = jwt.encode({'session_password': "invalid-password"},
+                              "invalid-secret", algorithm="HS256").decode("utf-8")
     headers = {
         "Authorization": "Bearer %s" % access_token
     }
