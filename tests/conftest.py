@@ -2,9 +2,11 @@
 
 from __future__ import absolute_import, unicode_literals
 
+import datetime
 import pytest
 
 from flask_app.app import create_app
+from passlib.hash import pbkdf2_sha256 as sha256
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.linear_model import LinearRegression
 from sklearn.pipeline import make_pipeline
@@ -22,7 +24,14 @@ def get_dummy_test_model():
 
 @pytest.fixture
 def client():
-    app = create_app({'TESTING': True}, get_dummy_test_model())
+    config = {
+        "TESTING": True,
+        "SESSION_PASSWORD": sha256.hash("test-password"),
+        "SECRET_KEY": "test-secret-key",
+        "JWT_SECRET_KEY": "test-secret-key",
+        "JWT_ACCESS_TOKEN_EXPIRES": datetime.timedelta(seconds=1)
+    }
+    app = create_app(config, get_dummy_test_model())
     client = app.test_client()
 
     yield client

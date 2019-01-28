@@ -95,9 +95,6 @@ def create_app(test_config=None, dummy_test_model=None):
         # And use the dummy test model
         app.logger.info("Loading app for testing")
         app.config.update(test_config)
-        app.config["SESSION_PASSWORD"] = sha256.hash("test-password")
-        app.config["SECRET_KEY"] = "test-secret-key"
-        app.config["JWT_SECRET_KEY"] = "test-secret-key"
         model = dummy_test_model
 
     jwt = JWTManager(app)
@@ -115,9 +112,9 @@ def create_app(test_config=None, dummy_test_model=None):
         if not sha256.verify(data["session_password"], app.config["SESSION_PASSWORD"]):
             raise InvalidUsage("Incorrect session password", status_code=401)
         access_token = create_access_token("session_password")
-        return jsonify(access_token=access_token)
+        return jsonify({"access_token": access_token})
 
-    @app.route("/protected", methods=["GET"])
+    @app.route("/api/protected", methods=["GET"])
     @jwt_required
     def protected():
         """
