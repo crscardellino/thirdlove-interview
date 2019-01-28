@@ -62,7 +62,7 @@ def create_app(test_config=None, dummy_test_model=None):
         else:
             try:
                 session_expiration = os.environ["SESSION_EXPIRATION"]
-                app.config["JWT_ACCESS_TOKEN_EXPIRES"] = int(session_expiration)
+                app.config["JWT_ACCESS_TOKEN_EXPIRES"] = datetime.timedelta(hours=int(session_expiration))
             except ValueError:
                 app.logger.warn("The SESSION_EXPIRATION environment variable is not a valid integer. " +
                                 "Setting it to 24 hours.")
