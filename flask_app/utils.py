@@ -4,7 +4,7 @@
 from __future__ import absolute_import
 
 
-class ModelNotFoundError(Exception):
+class InvalidConfigurationError(Exception):
     pass
 
 
@@ -24,11 +24,32 @@ class InvalidUsage(Exception):
         return rv
 
 
-def check_parameters(data):
+def check_login_parameters(request):
     """
-    Checks the parameters sent are correct. Raise InvalidUsage if not.
-    :param data: JSON dictionary with parameters to run the recommendations.
+    Checks the parameters sent for recommend are correct. Raise InvalidUsage if not.
+    :param request: Flask request object.
+    :return: Validated data dictionary.
     """
+    if not request.is_json:
+        raise InvalidUsage("Missing JSON request")
+
+    data = request.get_json()
+    if "session_password" not in data.keys():
+        raise InvalidUsage("Missing parameter: 'session_password'")
+
+    return data
+
+
+def check_recommend_data_parameters(request):
+    """
+    Checks the parameters sent for recommend are correct. Raise InvalidUsage if not.
+    :param request: Flask request object.
+    :return: Validated data dictionary.
+    """
+    if not request.is_json:
+        raise InvalidUsage("Missing JSON request")
+
+    data = request.get_json()
     valid_genders = {"M", "F", "O"}
     valid_occupations = {"administrator", "artist", "doctor", "educator",
                          "engineer", "entertainment", "executive", "healthcare",
