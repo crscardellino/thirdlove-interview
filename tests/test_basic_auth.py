@@ -2,9 +2,9 @@
 
 from __future__ import absolute_import, unicode_literals
 
-import pytest
-
 from time import sleep
+
+from tests.utils import get_test_client
 
 
 def test_authentication(client):
@@ -72,33 +72,6 @@ def test_unauthorized(client):
     assert "failed" in response_message
 
 
-def test_token_expiration(client):
-    """ Test requests with expired tokens are errors """
-    # First get a valid token
-    request_data = {"session_password": "test-password"}
-    response = client.post("/api/login", json=request_data)
-
-    response_data = response.get_json()
-    assert response.status_code == 200
-    assert "access_token" in response_data
-
-    # Wait for the token to expire
-    sleep(2)
-    access_token = response_data["access_token"]
-    headers = {
-        "Authorization": "Bearer %s" % access_token
-    }
-
-    response = client.get("/api/protected", headers=headers)
-    response_data = response.get_json()
-    assert response.status_code == 401
-    assert "msg" in response_data
-
-    response_message = response_data["msg"].lower()
-    assert "token" in response_message
-    assert "expired" in response_message
-
-
 def test_missing_password(client):
     """ Tests the missing password is an error """
     response = client.post("/api/login", json={})
@@ -126,3 +99,31 @@ def test_wrong_password(client):
     assert "incorrect" in response_message
     assert "session" in response_message
     assert "password" in response_message
+
+
+def test_token_expiration():
+    """ Test requests with expired tokens are errors """
+    client = get_test_client(1)  # Get special client with short token expiration time
+    # First get a valid token
+    request_data = {"session_password": "test-password"}
+    response = client.post("/api/login", json=request_data)
+
+    response_data = response.get_json()
+    assert response.status_code == 200
+    assert "access_token" in response_data
+
+    # Wait for the token to expire
+    sleep(2)
+    access_token = response_data["access_token"]
+    headers = {
+        "Authorization": "Bearer %s" % access_token
+    }
+
+    response = client.get("/api/protected", headers=headers)
+    response_data = response.get_json()
+    assert response.status_code == 401
+    assert "msg" in response_data
+
+    response_message = response_data["msg"].lower()
+    assert "token" in response_message
+    assert "expired" in response_message

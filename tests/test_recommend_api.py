@@ -2,9 +2,6 @@
 
 from __future__ import absolute_import, unicode_literals
 
-import json
-import pytest
-
 
 def test_recommend(client):
     """ Tests the basic recommend request is working correctly (using dummy model) """

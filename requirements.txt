@@ -1,6 +1,5 @@
 Flask==1.0.2
 Flask-JWT-Extended==3.16.0
-Flask-RESTful==0.3.7
 numpy==1.16.0
 passlib==1.7.1
 pytest==4.1.1
