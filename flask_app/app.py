@@ -124,6 +124,7 @@ def create_app(test_config=None, dummy_test_model=None):
 
     @app.route("/api/recommend", defaults={"max_recs": 10}, methods=["POST"])
     @app.route("/api/recommend/<max_recs>", methods=["POST"])
+    @jwt_required
     def recommend(max_recs):
         # Check the parameters are alright
         data = check_recommend_data_parameters(request)
