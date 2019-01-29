@@ -2,7 +2,6 @@
 
 from __future__ import absolute_import, unicode_literals
 
-import datetime
 import os
 import numpy as np
 
@@ -12,6 +11,7 @@ from logging.config import dictConfig
 from passlib.hash import pbkdf2_sha256 as sha256
 from sklearn.externals import joblib
 
+from flask_app.config import LOGGING_CONFIG, get_config_from_environment
 from flask_app.utils import InvalidConfigurationError, InvalidUsage,\
     check_recommend_data_parameters, check_login_parameters
 
@@ -25,48 +25,18 @@ def create_app(test_config=None, dummy_test_model=None):
     """
 
     # Define the logging configuration
+    dictConfig(LOGGING_CONFIG)
 
-    dictConfig({
-        "version": 1,
-        "formatters": {"default": {
-            "format": "[%(asctime)s] %(levelname)s in %(module)s: %(message)s",
-        }},
-        "handlers": {"wsgi": {
-            "class": "logging.StreamHandler",
-            "stream": "ext://flask.logging.wsgi_errors_stream",
-            "formatter": "default"
-        }},
-        "root": {
-            "level": "INFO",
-            "handlers": ["wsgi"]
-        }
-    })
-
+    # Initialize the application
     app = Flask(__name__)
 
     if test_config is None:
-        app.logger.info("Setting the configuration")
-        # Get secret key from environment, otherwise generate one
-        if os.environ.get("SECRET_KEY", None) is None:
-            app.logger.warn("The SECRET_KEY environment variable is not set. Setting it to random.")
-        app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", os.urandom(16))
+        app.config.update(get_config_from_environment(app.logger))
 
-        if os.environ.get("SECRET_KEY", None) is None:
-            app.logger.warn("The JWT_SECRET_KEY environment variable is not set. Setting it to SECRET_KEY.")
-        app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY", app.config["SECRET_KEY"])
-
-        # Get the default session expiration time (or set up otherwise)
-        if os.environ.get("SESSION_EXPIRATION", None) is None:
-            app.logger.warn("The SESSION_EXPIRATION environment variable is not set. Setting it to 24 hours.")
-            app.config["JWT_ACCESS_TOKEN_EXPIRES"] = datetime.timedelta(hours=24)
-        else:
-            try:
-                session_expiration = os.environ["SESSION_EXPIRATION"]
-                app.config["JWT_ACCESS_TOKEN_EXPIRES"] = datetime.timedelta(hours=int(session_expiration))
-            except ValueError:
-                app.logger.warn("The SESSION_EXPIRATION environment variable is not a valid integer. " +
-                                "Setting it to 24 hours.")
-                app.config["JWT_ACCESS_TOKEN_EXPIRES"] = datetime.timedelta(hours=24)
+        if os.environ.get("PROD_SETTINGS", None) is not None:
+            app.config.from_envvar("PROD_SETTINGS")
+        elif os.environ.get("DEV_SETTINGS", None) is not None:
+            app.config.from_envvar("DEV_SETTINGS")
 
         # Load the model given by the environment variable
         app.logger.info("Getting the machine learning model from the ML_MODEL_PATH " +
@@ -80,16 +50,6 @@ def create_app(test_config=None, dummy_test_model=None):
         app.logger.info("Loading model from path %s" % model_path)
         model = joblib.load(model_path)
         app.logger.info("Model successfully loaded")
-
-        # Get password from environment or return error
-        session_password = os.environ.get("SESSION_PASSWORD", None)
-        if session_password is None:
-            raise InvalidConfigurationError("The environment variable " +
-                                            "\"SESSION_PASSWORD\" doesn't exist. " +
-                                            "Please declare it before starting " +
-                                            "this application.")
-        else:
-            app.config["SESSION_PASSWORD"] = sha256.hash(session_password)
     else:
         # In case the app is being tested, update the configuration accordingly
         # And use the dummy test model
