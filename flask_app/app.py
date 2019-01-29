@@ -97,10 +97,17 @@ def create_app(test_config=None, dummy_test_model=None):
         X = [{**data, **{"movie": movie}} for movie in movies]
 
         # Predicts over the whole movie dataset and get the top recommendations
-        recommendations = model.predict(X)
-        recommendations = np.argsort(recommendations)[::-1][:max_recs]
+        try:
+            recommendations = model.predict(X)
+            recommendations = np.argsort(recommendations)[::-1][:max_recs]
 
-        return jsonify({"recommendations": [movies[i] for i in recommendations]})
+            return jsonify({"recommendations": [movies[i] for i in recommendations]})
+        except Exception as e:
+            app.logger.error("There was an exception while trying to get recommendations: %s" % e)
+            app.logger.error("Traceback of the exception:")
+            app.logger.exception(e)
+
+            return jsonify({"message": "There was a problem processing your request. Please try again later."}), 500
 
     @app.errorhandler(InvalidUsage)
     def handle_invalid_usage(error):
