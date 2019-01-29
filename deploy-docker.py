@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 from __future__ import print_function, unicode_literals
 
@@ -71,7 +72,7 @@ if __name__ == "__main__":
 
     print("\n\nRunning the Docker container", file=sys.stderr)
     run_command = list()
-    run_command.append("docker run -d --rm")
+    run_command.append("docker run -d")
     run_command.append("-p %(port_mapping)d:80")
     run_command.append("-e SESSION_PASSWORD=%(session_password)s")
 
@@ -83,6 +84,7 @@ if __name__ == "__main__":
         run_command.append("--log-driver=journald")
 
     run_command.append("--log-opt tag=%(log_tag)s")
+    run_command.append("--restart on-failure:5")
     run_command.append("--name %(container_name)s")
     run_command.append("%(image_name)s:%(image_version)s")
     run_command = " ".join(run_command)
@@ -105,6 +107,8 @@ if __name__ == "__main__":
         print("Logging by JournalD. You can check the logs for this container with " +
               "the following command:\n\tjournalctl CONTAINER_ID=%s" % container_id[:12], file=sys.stderr)
         print("You can check the logs for all the containers with the name %s " % run_args["container_name"] +
-              "with the following command:\n\tjournalctl CONTAINER_NAME=%s" % run_args["container_name"])
+              "with the following command:\n\tjournalctl CONTAINER_NAME=%s" % run_args["container_name"],
+              file=sys.stderr, end="\n\n")
+        print("You should monitor your container with the `monitor-docker.py` script")
 
     print("Deployment finished", file=sys.stderr)
