@@ -24,8 +24,8 @@ For the purpose of this exam, the model trained for the task is not thoroughly
 optimized, and is limited to the list of movies given by the dataset [movielens
 ml-100k](http://files.grouplens.org/datasets/movielens/ml-100k/).
 
-For the model I used a simple linear regression algorithm trained with the
-previously mentioned dataset that, given a list of user metadata and a movie
+For the model I used a simple random forest regression algorithm trained with
+the previously mentioned dataset that, given a list of user metadata and a movie
 from the list tries to guess the rating the user would give to the movie. Based
 on that, the API should retrieve a list of the top X movie recommendations for
 that user.
