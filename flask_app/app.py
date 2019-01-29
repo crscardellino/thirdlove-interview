@@ -2,9 +2,9 @@
 
 from __future__ import absolute_import, unicode_literals
 
-import datetime
 import os
 import numpy as np
+import uuid
 
 from flask import Flask, jsonify, request
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required
@@ -12,8 +12,9 @@ from logging.config import dictConfig
 from passlib.hash import pbkdf2_sha256 as sha256
 from sklearn.externals import joblib
 
+from flask_app.config import LOGGING_CONFIG, get_config_from_environment
 from flask_app.utils import InvalidConfigurationError, InvalidUsage,\
-    check_recommend_data_parameters, check_login_parameters
+    check_recommend_data_parameters, check_login_parameters, check_score_parameters
 
 
 def create_app(test_config=None, dummy_test_model=None):
@@ -25,48 +26,18 @@ def create_app(test_config=None, dummy_test_model=None):
     """
 
     # Define the logging configuration
+    dictConfig(LOGGING_CONFIG)
 
-    dictConfig({
-        "version": 1,
-        "formatters": {"default": {
-            "format": "[%(asctime)s] %(levelname)s in %(module)s: %(message)s",
-        }},
-        "handlers": {"wsgi": {
-            "class": "logging.StreamHandler",
-            "stream": "ext://flask.logging.wsgi_errors_stream",
-            "formatter": "default"
-        }},
-        "root": {
-            "level": "INFO",
-            "handlers": ["wsgi"]
-        }
-    })
-
+    # Initialize the application
     app = Flask(__name__)
 
     if test_config is None:
-        app.logger.info("Setting the configuration")
-        # Get secret key from environment, otherwise generate one
-        if os.environ.get("SECRET_KEY", None) is None:
-            app.logger.warn("The SECRET_KEY environment variable is not set. Setting it to random.")
-        app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", os.urandom(16))
+        app.config.update(get_config_from_environment(app.logger))
 
-        if os.environ.get("SECRET_KEY", None) is None:
-            app.logger.warn("The JWT_SECRET_KEY environment variable is not set. Setting it to SECRET_KEY.")
-        app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY", app.config["SECRET_KEY"])
-
-        # Get the default session expiration time (or set up otherwise)
-        if os.environ.get("SESSION_EXPIRATION", None) is None:
-            app.logger.warn("The SESSION_EXPIRATION environment variable is not set. Setting it to 24 hours.")
-            app.config["JWT_ACCESS_TOKEN_EXPIRES"] = datetime.timedelta(hours=24)
-        else:
-            try:
-                session_expiration = os.environ["SESSION_EXPIRATION"]
-                app.config["JWT_ACCESS_TOKEN_EXPIRES"] = datetime.timedelta(hours=int(session_expiration))
-            except ValueError:
-                app.logger.warn("The SESSION_EXPIRATION environment variable is not a valid integer. " +
-                                "Setting it to 24 hours.")
-                app.config["JWT_ACCESS_TOKEN_EXPIRES"] = datetime.timedelta(hours=24)
+        if os.environ.get("PROD_SETTINGS", None) is not None:
+            app.config.from_envvar("PROD_SETTINGS")
+        elif os.environ.get("DEV_SETTINGS", None) is not None:
+            app.config.from_envvar("DEV_SETTINGS")
 
         # Load the model given by the environment variable
         app.logger.info("Getting the machine learning model from the ML_MODEL_PATH " +
@@ -80,16 +51,6 @@ def create_app(test_config=None, dummy_test_model=None):
         app.logger.info("Loading model from path %s" % model_path)
         model = joblib.load(model_path)
         app.logger.info("Model successfully loaded")
-
-        # Get password from environment or return error
-        session_password = os.environ.get("SESSION_PASSWORD", None)
-        if session_password is None:
-            raise InvalidConfigurationError("The environment variable " +
-                                            "\"SESSION_PASSWORD\" doesn't exist. " +
-                                            "Please declare it before starting " +
-                                            "this application.")
-        else:
-            app.config["SESSION_PASSWORD"] = sha256.hash(session_password)
     else:
         # In case the app is being tested, update the configuration accordingly
         # And use the dummy test model
@@ -108,9 +69,14 @@ def create_app(test_config=None, dummy_test_model=None):
 
     @app.route("/api/login", methods=["POST"])
     def login():
+        # Check the parameters are correct
         data = check_login_parameters(request)
+
+        # Verify the password is valid
         if not sha256.verify(data["session_password"], app.config["SESSION_PASSWORD"]):
             raise InvalidUsage("Incorrect session password", status_code=401)
+
+        # Return the access token
         access_token = create_access_token("session_password")
         return jsonify({"access_token": access_token})
 
@@ -122,10 +88,25 @@ def create_app(test_config=None, dummy_test_model=None):
         """
         return jsonify({"message": "Protected"})
 
+    @app.route("/api/recommend/score", methods=["POST"])
+    @jwt_required
+    def score():
+        # Check the parameters are correct
+        data = check_score_parameters(request)
+
+        # Log the score via the app logger
+        data_log = "\nREQUEST SCORE LOG\n"
+        data_log += "REQUEST: %s\n" % data["id"]
+        data_log += "MOVIE: %s\n" % data["movie"]
+        data_log += "SCORE: %.2f" % data["score"]
+        app.logger.info(data_log)
+
+        return jsonify("Ok"), 200
+
     @app.route("/api/recommend", methods=["POST"])
     @jwt_required
     def recommend():
-        # Check the parameters are alright
+        # Check the parameters are correct
         data = check_recommend_data_parameters(request)
 
         # Get all the movies of the model (this depends on the model)
@@ -137,10 +118,34 @@ def create_app(test_config=None, dummy_test_model=None):
         X = [{**data, **{"movie": movie}} for movie in movies]
 
         # Predicts over the whole movie dataset and get the top recommendations
-        recommendations = model.predict(X)
-        recommendations = np.argsort(recommendations)[::-1][:max_recs]
+        try:
+            recommendations = model.predict(X)
+            sorted_recommendations_indices = np.argsort(recommendations)[::-1][:max_recs]
+            recommended_movies = [movies[i] for i in sorted_recommendations_indices]
 
-        return jsonify({"recommendations": [movies[i] for i in recommendations]})
+            # Log the valid recommendation and generate an id for it
+            request_id = uuid.uuid4()
+
+            data_log = "\nREQUEST RESULT LOG\n"
+            data_log += "REQUEST_ID: %s\n" % request_id
+            data_log += "DATA: Age=%d Gender=%s Occupation=%s\n" %\
+                        (data["age"], data["gender"], data["occupation"])
+            data_log += "MOVIES: %s\n" %\
+                        ";".join('"%s"' % m.replace('"', '\\"') for m in recommended_movies)
+            data_log += "RESULTS: %s" %\
+                        ";".join("%.2f" % r for r in recommendations[sorted_recommendations_indices])
+            app.logger.info(data_log)
+
+            return jsonify({
+                "recommendations": recommended_movies,
+                "id": str(request_id)
+            })
+        except Exception as e:
+            app.logger.error("There was an exception while trying to get recommendations: %s" % e)
+            app.logger.error("Traceback of the exception:")
+            app.logger.exception(e)
+
+            return jsonify({"message": "There was a problem processing your request. Please try again later."}), 500
 
     @app.errorhandler(InvalidUsage)
     def handle_invalid_usage(error):
