@@ -40,6 +40,32 @@ def check_login_parameters(request):
     return data
 
 
+def check_score_parameters(request):
+    """
+    Checks the parameters sent for recommend score are correct. Raise InvalidUsage if not.
+    :param request: Flask request object.
+    :return: Validated data dictionary.
+    """
+    if not request.is_json:
+        raise InvalidUsage("Missing JSON request")
+
+    data = request.get_json()
+    if "id" not in data.keys():
+        raise InvalidUsage("Missing parameter: 'id'")
+    elif len(data["id"]) != 36 or len(data["id"].split("-")) != 5:
+        raise InvalidUsage("Invalid parameter 'id'")
+    elif "movie" not in data:
+        raise InvalidUsage("Missing parameter: 'movie'")
+    elif "score" not in data:
+        raise InvalidUsage("Missing parameter: 'score'")
+    elif not (isinstance(data["score"], int) or isinstance(data["score"], float)):
+        raise InvalidUsage("Parameter 'score' must be a valid number")
+    elif not (1 <= data["score"] <= 5):
+        raise InvalidUsage("Parameter 'score' must be in the [1,5] interval")
+
+    return data
+
+
 def check_recommend_data_parameters(request):
     """
     Checks the parameters sent for recommend are correct. Raise InvalidUsage if not.

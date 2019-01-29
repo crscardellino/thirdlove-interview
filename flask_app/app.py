@@ -14,7 +14,7 @@ from sklearn.externals import joblib
 
 from flask_app.config import LOGGING_CONFIG, get_config_from_environment
 from flask_app.utils import InvalidConfigurationError, InvalidUsage,\
-    check_recommend_data_parameters, check_login_parameters
+    check_recommend_data_parameters, check_login_parameters, check_score_parameters
 
 
 def create_app(test_config=None, dummy_test_model=None):
@@ -69,9 +69,14 @@ def create_app(test_config=None, dummy_test_model=None):
 
     @app.route("/api/login", methods=["POST"])
     def login():
+        # Check the parameters are correct
         data = check_login_parameters(request)
+
+        # Verify the password is valid
         if not sha256.verify(data["session_password"], app.config["SESSION_PASSWORD"]):
             raise InvalidUsage("Incorrect session password", status_code=401)
+
+        # Return the access token
         access_token = create_access_token("session_password")
         return jsonify({"access_token": access_token})
 
@@ -83,10 +88,25 @@ def create_app(test_config=None, dummy_test_model=None):
         """
         return jsonify({"message": "Protected"})
 
+    @app.route("/api/recommend/score", methods=["POST"])
+    @jwt_required
+    def score():
+        # Check the parameters are correct
+        data = check_score_parameters(request)
+
+        # Log the score via the app logger
+        data_log = "\nREQUEST SCORE LOG\n"
+        data_log += "REQUEST: %s\n" % data["id"]
+        data_log += "MOVIE: %s\n" % data["movie"]
+        data_log += "SCORE: %.2f" % data["score"]
+        app.logger.info(data_log)
+
+        return jsonify("Ok"), 200
+
     @app.route("/api/recommend", methods=["POST"])
     @jwt_required
     def recommend():
-        # Check the parameters are alright
+        # Check the parameters are correct
         data = check_recommend_data_parameters(request)
 
         # Get all the movies of the model (this depends on the model)
@@ -106,7 +126,8 @@ def create_app(test_config=None, dummy_test_model=None):
             # Log the valid recommendation and generate an id for it
             request_id = uuid.uuid4()
 
-            data_log = "Results for request with id %s:\n" % request_id
+            data_log = "\nREQUEST RESULT LOG\n"
+            data_log += "REQUEST_ID: %s\n" % request_id
             data_log += "DATA: Age=%d Gender=%s Occupation=%s\n" %\
                         (data["age"], data["gender"], data["occupation"])
             data_log += "MOVIES: %s\n" %\
