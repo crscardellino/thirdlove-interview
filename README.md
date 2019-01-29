@@ -344,6 +344,10 @@ An example of using this script is the following:
 
     ./monitor-docker.py thirdlove smtp.gmail.com crscardellino@gmail.com --print --smtp-port 587 --is-secure
 
+##### Note on deployment/monitoring scripts
+
+The two previous scripts require Python 3.6 to work.
+
 ### Overview of the application design
 
 This application was done as a requirement for an interview at ThirdLove.com.
