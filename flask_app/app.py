@@ -4,6 +4,7 @@ from __future__ import absolute_import, unicode_literals
 
 import os
 import numpy as np
+import uuid
 
 from flask import Flask, jsonify, request
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required
@@ -99,9 +100,25 @@ def create_app(test_config=None, dummy_test_model=None):
         # Predicts over the whole movie dataset and get the top recommendations
         try:
             recommendations = model.predict(X)
-            recommendations = np.argsort(recommendations)[::-1][:max_recs]
+            sorted_recommendations_indices = np.argsort(recommendations)[::-1][:max_recs]
+            recommended_movies = [movies[i] for i in sorted_recommendations_indices]
 
-            return jsonify({"recommendations": [movies[i] for i in recommendations]})
+            # Log the valid recommendation and generate an id for it
+            request_id = uuid.uuid4()
+
+            data_log = "Results for request with id %s:\n" % request_id
+            data_log += "DATA: Age=%d Gender=%s Occupation=%s\n" %\
+                        (data["age"], data["gender"], data["occupation"])
+            data_log += "MOVIES: %s\n" %\
+                        ";".join('"%s"' % m.replace('"', '\\"') for m in recommended_movies)
+            data_log += "RESULTS: %s" %\
+                        ";".join("%.2f" % r for r in recommendations[sorted_recommendations_indices])
+            app.logger.info(data_log)
+
+            return jsonify({
+                "recommendations": recommended_movies,
+                "id": str(request_id)
+            })
         except Exception as e:
             app.logger.error("There was an exception while trying to get recommendations: %s" % e)
             app.logger.error("Traceback of the exception:")
