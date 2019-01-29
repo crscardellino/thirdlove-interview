@@ -25,10 +25,10 @@ optimized, and is limited to the list of movies given by the dataset [movielens
 ml-100k](http://files.grouplens.org/datasets/movielens/ml-100k/).
 
 For the model I used a simple random forest regression algorithm trained with
-the previously mentioned dataset that, given a list of user metadata and a movie
-from the list tries to guess the rating the user would give to the movie. Based
-on that, the API should retrieve a list of the top X movie recommendations for
-that user.
+the previously mentioned dataset that, given a list of user metadata and a
+movie from the list tries to guess the rating the user would give to the movie.
+Based on that, the API should retrieve a list of the top X movie
+recommendations for that user.
 
 ### Design of the API
 
@@ -47,7 +47,7 @@ available.
 
 The first two URIs presented in the table are there for testing purposes. The
 first is a basic test to see the application is effectively working.  The
-second URI is only accessible after logging into the application, thus it is 
+second URI is only accessible after logging into the application, thus it is
 useful to test if the JWT Token Authentication is correctly working.
 
 The third resource: `/api/login` is needed to authenticate the session, with
@@ -127,13 +127,42 @@ To run the application you need [to install docker](https://docs.docker.com/inst
 
 Build the image with the following command:
 
-    docker build -t <image_name> .
+    docker build -t <image_name> --build-arg MODEL_FILE=path/to/model.pkl --build-arg MODEL_TEST_FILE=path/to/test_data.json
+
+The build arguments `MODEL_FILE` and `MODEL_TEST_FILE` are optional and, if not
+given, will use the files in the `model/` directory (provided that the
+repository has been cloned with [Git LFS
+support](https://git-lfs.github.com/)).  The model file should be named
+`model.pkl` or being a `.tar.gz` file with a single file named `model.pkl`.
+The purpose of these files is discussed in the section **Testing model
+accuracy**.
 
 Instantiate the image in a container with the following command:
 
     docker run -d --rm -p 5000:80 -v path/to/model/dir:/model -e ML_MODEL_PATH="/model/model.pkl" -e SESSION_PASSWORD="test" --name <container_name> <image_name>
 
-Where `path/to/model/dir` is the path tha holds the file `model.pkl`.
+Where `path/to/model/dir` is the path tha holds the file `model.pkl`.  If
+`MODEL_PATH` is not given, the server will use the default value created when
+the Docker image was built (note: in this case, you should not mount the volume
+with the `-v path/to/model/dir:/model` argument).
+
+##### Troubleshoot while running the model on Docker
+
+The image will be built and tested on build. If the tests fails, the image
+might be dangling, check there's no container of the image with the following
+command:
+
+    docker ps -a
+
+If there is a container remove it with:
+
+    docker rm <container_id>
+    
+Finally, remove the dangling image with the following command:
+
+    docker rmi $(docker images --filter "dangling=true" -q --no-trunc)
+
+Check (and correct) the erroneous tests and build and run the image again.
 
 #### Testing the application
 
@@ -161,21 +190,63 @@ In case of a Docker container, the image is tested while being built. But, it
 can be tested on a running container as well with the following command:
 
     docker exec -it <container_name> pytest
-    
-##### Troubleshoot while running the model on Docker
 
-The image will be built and tested on build. If the tests fails, the image
-might be dangling, check there's no container of the image with the following
+##### Testing model accuracy
+
+The `./test/run_accuracy_tests.py` script has the objective to check that a
+model loaded in a docker container (or tested locally) achieves as much
+performance as it did when originally trained. This is to avoid that the change
+of environment affects the general performance of the model. To run this script
+you need a test data file.  The test data file is a JSON file with three keys:
+
+1. `data`: Has a list of the data to use to test the model. It should be in the
+   format the model expects (e.g. objects, lists of numbers, etc.)
+2. `target`: A list with the corresponding "true values" for each instance of
+   the `data` field.
+3. `expected_score`: A float with the expected score to be obtained by the
+   model.
+
+This is why it was needed when creating the Docker image previously. To run the
+script locally, you only need to run the following (provided the environment is
+correctly set):
+
+    python ./tests/run_accuracy_tests.py path/to/model.pkl path/to/test_data.json [--error-tolerance 0.0001]
+
+The `--error-tolerance` argument is optional (defaults to 1e-5) and defines how
+much tolerance we give to the accuracy of the model.
+
+For this particular script the accuracy is actually what the scikit-learn model
+considers its score function (e.g. for regression algorithms is R^2). It can be
+changed for any other metric easily.
+
+For the case of Docker, when building the image this script will be run. But if
+you want to run it on a running container, you can do it with the following
 command:
 
-    docker ps -a
+    docker exec -it <container_name> python tests/run_accuracy_tests.py /model/model.pkl /model/test_data.json
 
-If there is a container remove it with:
+### Deployment pipeline for machine learning cycle
 
-    docker rm <container_id>
-    
-Finally, remove the dangling image with the following command:
+The idea behind this pipeline is to merge the traditional ci/cd pipeline for
+development and add a layer to setup and check the new models are working
+before deployment.
 
-    docker rmi $(docker images --filter "dangling=true" -q --no-trunc)
+In this case, the idea of a model correctly "working" means that the API has to
+pass the unit tests assigned to it plus that the model should be tested against
+some known baseline and check that there was not any accuracy lost in the
+deployment process.
 
-Check (and correct) the erroneous tests and build and run the image again.
+The best solution I came accross (inspired on the post by [Alvaro Fernando
+Lara](https://medium.com/onfido-tech/continuous-integration-for-ml-projects-e11bc1a4d34f))
+while building this pipeline was the use of a Docker image that would ensure
+the environment compatibility with the one given by the model, thus the
+developtment cycle would follow this pattern:
+
+- Introduce the changes to the code or the new model.
+- Build a docker image based on these changes.
+- Run traditional integration and unit tests over the new model built.
+- Run accuracy tests over the model and some given test data.
+
+The workflow can be pictured in the following image:
+
+![Deployment Workflow](deployment-flow.png "Deployment Workflow")
