@@ -3,6 +3,7 @@
 from __future__ import absolute_import, unicode_literals
 
 import pytest
+import uuid
 
 
 @pytest.fixture
@@ -28,6 +29,9 @@ def test_recommend(client, authentication_headers):
     assert "recommendations" in response_data
     assert "Test" in response_data["recommendations"]
     assert len(response_data["recommendations"]) == 1
+    assert "id" in response_data
+    assert len(response_data["id"]) == 36
+    assert len(response_data["id"].split("-")) == 5
 
 
 def test_recommend_age_1(client, authentication_headers):
@@ -148,3 +152,111 @@ def test_recommend_invalid_param(client, authentication_headers):
     assert "only" in response_message
     assert "valid" in response_message
     assert "parameters" in response_message
+
+
+def test_score(client, authentication_headers):
+    request_data = {"id": str(uuid.uuid4()), "movie": "Test", "score": 1}
+    response = client.post("/api/recommend/score", json=request_data, headers=authentication_headers)
+
+    response_data = response.get_json()
+    assert response.status_code == 200
+    assert response_data == "Ok"
+
+
+def test_score_id_1(client, authentication_headers):
+    request_data = {"movie": "Test", "score": 1}
+    response = client.post("/api/recommend/score", json=request_data, headers=authentication_headers)
+
+    response_data = response.get_json()
+    assert response.status_code == 400
+    assert "message" in response_data
+
+    response_message = response_data["message"].lower()
+    assert "missing" in response_message
+    assert "parameter" in response_message
+    assert "id" in response_message
+
+
+def test_score_id_2(client, authentication_headers):
+    request_data = {"id": "invalid", "movie": "Test", "score": 1}
+    response = client.post("/api/recommend/score", json=request_data, headers=authentication_headers)
+
+    response_data = response.get_json()
+    assert response.status_code == 400
+    assert "message" in response_data
+
+    response_message = response_data["message"].lower()
+    assert "invalid" in response_message
+    assert "parameter" in response_message
+    assert "id" in response_message
+
+
+def test_score_id_3(client, authentication_headers):
+    request_data = {"id": "i" * 36, "movie": "Test", "score": 1}
+    response = client.post("/api/recommend/score", json=request_data, headers=authentication_headers)
+
+    response_data = response.get_json()
+    assert response.status_code == 400
+    assert "message" in response_data
+
+    response_message = response_data["message"].lower()
+    assert "invalid" in response_message
+    assert "parameter" in response_message
+    assert "id" in response_message
+
+
+def test_score_movie_1(client, authentication_headers):
+    request_data = {"id": str(uuid.uuid4()), "score": 1}
+    response = client.post("/api/recommend/score", json=request_data, headers=authentication_headers)
+
+    response_data = response.get_json()
+    assert response.status_code == 400
+    assert "message" in response_data
+
+    response_message = response_data["message"].lower()
+    assert "missing" in response_message
+    assert "parameter" in response_message
+    assert "movie" in response_message
+
+
+def test_score_score_1(client, authentication_headers):
+    request_data = {"id": str(uuid.uuid4()), "movie": "Test"}
+    response = client.post("/api/recommend/score", json=request_data, headers=authentication_headers)
+
+    response_data = response.get_json()
+    assert response.status_code == 400
+    assert "message" in response_data
+
+    response_message = response_data["message"].lower()
+    assert "missing" in response_message
+    assert "parameter" in response_message
+    assert "score" in response_message
+
+
+def test_score_score_2(client, authentication_headers):
+    request_data = {"id": str(uuid.uuid4()), "movie": "Test", "score": "a"}
+    response = client.post("/api/recommend/score", json=request_data, headers=authentication_headers)
+
+    response_data = response.get_json()
+    assert response.status_code == 400
+    assert "message" in response_data
+
+    response_message = response_data["message"].lower()
+    assert "parameter" in response_message
+    assert "score" in response_message
+    assert "valid" in response_message
+    assert "number" in response_message
+
+
+def test_score_score_3(client, authentication_headers):
+    request_data = {"id": str(uuid.uuid4()), "movie": "Test", "score": 5.5}
+    response = client.post("/api/recommend/score", json=request_data, headers=authentication_headers)
+
+    response_data = response.get_json()
+    assert response.status_code == 400
+    assert "message" in response_data
+
+    response_message = response_data["message"].lower()
+    assert "parameter" in response_message
+    assert "score" in response_message
+    assert "interval" in response_message
