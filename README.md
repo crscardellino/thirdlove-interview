@@ -4,13 +4,6 @@ ThirdLove Machine Learning Engineer Interview Exam
 This README contains all the information relevant to the interview process and
 exam given at ThirdLove.
 
-Section 1 Answers
------------------
-
-Please refer to the file `exam/SECTION1.txt` in order to check the answers to
-the questions of Section 1.
-
-
 Application README
 ------------------
 
